@@ -325,18 +325,29 @@ def citizen_alert(r):
 if view == "Resident":
     my = st.selectbox("Your district", list(R.District.sort_values()), key="mydist")
     r = R[R.District == my].iloc[0].to_dict()
-    flag = f"seen::{my}::{r['Band']}::{r['mm']}"
+
+    # the app tells you - it does not wait to be asked. fires on open, and again
+    # whenever your district's warning level changes.
+    flag = f"alerted::{my}::{r['Band']}"
     if r["Band"] in ("RED", "ORANGE") and not st.session_state.get(flag):
         st.session_state[flag] = True
         citizen_alert(r)
-    st.markdown(
-        f"<div class='alert' style='--c:{r['C']};padding:24px 26px'>"
-        f"<div class='tag'>{r['Band']} · {MEANING[r['Band']].upper()}</div>"
-        f"<div class='ttl' style='font-size:2.1rem'>{r['District']} · {r['mm']} mm expected</div>"
-        f"<div class='act'>{r['Action']}</div></div>", unsafe_allow_html=True)
-    st.write("")
-    if st.button("Show my alert"):
-        citizen_alert(r)
+
+    if r["Band"] in ("RED", "ORANGE"):
+        st.markdown(
+            f"<div class='alert' style='--c:{r['C']};padding:24px 26px'>"
+            f"<div class='tag'>{r['Band']} · {MEANING[r['Band']].upper()}</div>"
+            f"<div class='ttl' style='font-size:2.1rem'>{r['District']} · {r['mm']} mm expected</div>"
+            f"<div class='act'>{r['Action']}</div></div>", unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f"<div class='alert' style='--c:#00E08A;padding:24px 26px'>"
+            f"<div class='tag'>NO WARNING · {r['District'].upper()}</div>"
+            f"<div class='ttl' style='font-size:2rem'>Normal day</div>"
+            f"<div class='act'>{r['mm']} mm of rain expected. Nothing to do - you will be told "
+            f"if that changes.</div>"
+            f"<div class='meta'>THE APP CHECKS THE FORECAST EVERY HOUR. YOU DO NOT NEED TO OPEN IT.</div>"
+            f"</div>", unsafe_allow_html=True)
     st.stop()
 
 # ---------------- OFFICER VIEW · THREE TABS -------------------------------
