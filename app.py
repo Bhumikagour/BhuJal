@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 st.set_page_config(page_title="BhuJal · Assam Flood Risk", page_icon="🌊", layout="wide")
 
@@ -384,6 +384,62 @@ if view == "Resident":
                         "<div class='n'>Silence means safe.</div></div>", unsafe_allow_html=True)
     st.stop()
 
+
+# ================= AUTO-BROADCAST ENGINE ==================================
+# No operator presses send. The moment a district crosses into ORANGE or RED
+# the roll for that district is dispatched. The flag clears when it drops back
+# to safe, so the next escalation broadcasts again.
+
+SEED_ROLL = {d: [f"+9194{abs(hash(d))%10:1d}{i:07d}" for i in range(1, 5)]
+             for d in DISTRICTS.index}
+
+if "roll" not in st.session_state:
+    st.session_state.roll = {d: list(v) for d, v in SEED_ROLL.items()}
+if "log" not in st.session_state:
+    st.session_state.log = []
+if "sent_band" not in st.session_state:
+    st.session_state.sent_band = {}
+
+def _gateway(number, body):
+    """Real numbers go to the gateway. Seeded roll entries are fan-out
+    placeholders and are never transmitted — they are marked as such."""
+    if number.startswith("+9194"):
+        return "SIMULATED", "roll placeholder — not transmitted"
+    key = "textbelt"
+    try:
+        key = st.secrets.get("TEXTBELT_KEY", "textbelt")
+    except Exception:
+        pass
+    try:
+        j = requests.post("https://textbelt.com/text", timeout=12,
+                          data={"phone": number, "message": body, "key": key}).json()
+    except Exception as e:
+        return "FAILED", f"network unreachable — {e}"
+    return ("TRANSMITTED", str(j.get("textId", "—"))) if j.get("success") \
+           else ("REFUSED", str(j.get("error", "unknown")))
+
+def auto_broadcast(frame):
+    fired = []
+    for _, row in frame.iterrows():
+        d, band = row["District"], row["Band"]
+        if band in ("RED", "ORANGE"):
+            if st.session_state.sent_band.get(d) != band:
+                st.session_state.sent_band[d] = band
+                body = sms_for(row.to_dict())
+                stamp = datetime.now().strftime("%H:%M:%S")
+                for num in st.session_state.roll.get(d, []):
+                    status, note = _gateway(num, body)
+                    st.session_state.log.insert(0, {
+                        "Time": stamp, "District": d, "Band": band,
+                        "Number": num[:6] + "\u2022" * 4 + num[-3:],
+                        "Chars": len(body), "Status": status, "Gateway": note})
+                fired.append((d, band, len(st.session_state.roll.get(d, []))))
+        else:
+            st.session_state.sent_band.pop(d, None)
+    return fired
+
+FIRED = auto_broadcast(R)
+
 # ---------------- OFFICER VIEW · THREE TABS -------------------------------
 T1, T2, T3 = st.tabs(["Warning", "Risk map", "Alert dispatch"])
 
@@ -533,34 +589,52 @@ with T3:
                     "<div class='n'>Char villages lose tower coverage as the river rises. The system "
                     "degrades to paper and cloth by design.</div></div>", unsafe_allow_html=True)
 
-    # ---------- LIVE TRANSMIT ---------------------------------------------
+    # ---------- AUTO-BROADCAST ---------------------------------------------
     st.write("")
-    st.markdown("<div class='sec'>Live transmit · real SMS gateway</div>", unsafe_allow_html=True)
-    tc1, tc2 = st.columns([2, 3])
-    with tc1:
-        num = st.text_input("Recipient number (with country code)", placeholder="+919xxxxxxxxx")
-        go = st.button("TRANSMIT SMS NOW", type="primary", use_container_width=True)
-    with tc2:
-        st.markdown(f"<div class='pnl'><div class='h'>Payload · {len(s_)} chars</div>"
-                    f"<div class='b'>{s_}</div>"
-                    f"<div class='n'>POST to the SMS gateway. In deployment this is a cell-broadcast "
-                    f"provider fanning out to every handset registered to a {pick} tower — the payload "
-                    f"is identical.</div></div>", unsafe_allow_html=True)
+    st.markdown("<div class='sec'>Auto-broadcast · fired without an operator</div>",
+                unsafe_allow_html=True)
 
-    if go:
-        if not num.strip():
-            st.warning("Enter a number first.")
-        else:
-            key = st.secrets.get("TEXTBELT_KEY", "textbelt") if hasattr(st, "secrets") else "textbelt"
-            try:
-                resp = requests.post("https://textbelt.com/text", timeout=15, data={
-                    "phone": num.strip(), "message": s_, "key": key}).json()
-            except Exception as e:
-                resp = {"success": False, "error": f"network unreachable — {e}"}
-            if resp.get("success"):
-                st.success(f"TRANSMITTED · {pick} · {r['Band']} · {len(s_)} chars · "
-                           f"gateway id {resp.get('textId','—')}")
-            else:
-                st.error(f"GATEWAY REFUSED · {resp.get('error','unknown')}")
-                st.caption("Free tier is one message per day per IP. The payload above is what "
-                           "would have gone out — dispatch logic ran, the gateway quota did not.")
+    live = R[R.Band.isin(["RED", "ORANGE"])]
+    reach = sum(len(st.session_state.roll.get(d, [])) for d in live.District)
+    st.markdown(
+        f"<div class='alert' style='--c:#22D9E8'>"
+        f"<div class='tag'>BROADCAST ENGINE · ARMED</div>"
+        f"<div class='ttl'>{len(live)} districts under warning &middot; {reach} numbers on roll</div>"
+        f"<div class='act'>Nobody presses send. When a district crosses into ORANGE or RED the "
+        f"engine dispatches that district's roll immediately, and re-arms once the district "
+        f"returns to safe.</div></div>", unsafe_allow_html=True)
+
+    if FIRED:
+        for d, band, n in FIRED:
+            st.toast(f"BROADCAST · {d} · {band} · {n} numbers")
+
+    e1, e2 = st.columns([2, 3])
+    with e1:
+        mynum = st.text_input("Add a number to a district roll",
+                              placeholder="+919xxxxxxxxx", key="enrol_num")
+        mydist = st.selectbox("District roll", list(R.District.sort_values()), key="enrol_dist")
+        if st.button("ENROL", use_container_width=True):
+            n = mynum.strip()
+            if n and n not in st.session_state.roll.get(mydist, []):
+                st.session_state.roll.setdefault(mydist, []).append(n)
+                st.session_state.sent_band.pop(mydist, None)   # re-arm for this roll
+                st.rerun()
+    with e2:
+        st.markdown(
+            f"<div class='pnl'><div class='h'>How the fan-out works</div><div class='b'>"
+            f"Roll placeholders are marked SIMULATED and never transmitted.\n"
+            f"A number you enrol is dispatched through a live SMS gateway.\n"
+            f"In deployment the roll is the cell-broadcast tower list, not a\n"
+            f"phone book — every handset in the district cell receives it.</div>"
+            f"<div class='n'>Enrol your own number, then push the district into RED with the "
+            f"rainfall control. The broadcast fires on its own.</div></div>",
+            unsafe_allow_html=True)
+
+    st.write("")
+    st.markdown("<div class='sec'>Dispatch log</div>", unsafe_allow_html=True)
+    if st.session_state.log:
+        st.dataframe(pd.DataFrame(st.session_state.log[:60]),
+                     use_container_width=True, hide_index=True)
+    else:
+        st.markdown("<div class='pnl'><div class='b'>No district has crossed into warning. "
+                    "Nothing dispatched.</div></div>", unsafe_allow_html=True)
