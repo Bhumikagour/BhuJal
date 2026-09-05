@@ -509,7 +509,8 @@ with T1:
     </div>""", unsafe_allow_html=True)
 
     st.markdown(f"<div class='alert' style='--c:{top['C']};padding:22px 26px'>"
-                f"<div class='tag'>{top['Band']} · {MEANING[top['Band']].upper()} · HIGHEST RISK</div>"
+                f"<div class='tag'>{top['Band']} · {MEANING[top['Band']].upper()} · "
+                f"{'HIGHEST RISK' if top['Band'] != 'GREEN' else 'NO DISTRICT UNDER WARNING'}</div>"
                 f"<div class='ttl' style='font-size:2.1rem'>{top['District']} · {top['Risk']}/100</div>"
                 f"<div class='act'>{top['Action']}</div>"
                 f"<div class='meta'>{top['mm']}MM RAIN · {top['emb'].upper()} EMBANKMENT · "
