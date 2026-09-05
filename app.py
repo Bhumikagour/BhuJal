@@ -320,8 +320,8 @@ def citizen_alert(r):
                     f"<div class='n'>Sent to every number on the {r['District']} cell tower, "
                     f"registered or not.</div></div>", unsafe_allow_html=True)
 
-T1, T2, T3, T4 = st.tabs(["Overview", "Risk scores", "Alert dispatch", "Data & method"])
 
+# ---------------- RESIDENT VIEW -------------------------------------------
 if view == "Resident":
     my = st.selectbox("Your district", list(R.District.sort_values()), key="mydist")
     r = R[R.District == my].iloc[0].to_dict()
@@ -330,15 +330,19 @@ if view == "Resident":
         st.session_state[flag] = True
         citizen_alert(r)
     st.markdown(
-        f"<div class='alert' style='--c:{r['C']};padding:22px 24px'>"
+        f"<div class='alert' style='--c:{r['C']};padding:24px 26px'>"
         f"<div class='tag'>{r['Band']} · {MEANING[r['Band']].upper()}</div>"
-        f"<div class='ttl' style='font-size:2rem'>{r['District']} · {r['mm']} mm expected</div>"
+        f"<div class='ttl' style='font-size:2.1rem'>{r['District']} · {r['mm']} mm expected</div>"
         f"<div class='act'>{r['Action']}</div></div>", unsafe_allow_html=True)
-    if st.button("Show my alert", use_container_width=False):
+    st.write("")
+    if st.button("Show my alert"):
         citizen_alert(r)
     st.stop()
 
-# ================= OVERVIEW ===============================================
+# ---------------- OFFICER VIEW · THREE TABS -------------------------------
+T1, T2, T3 = st.tabs(["Warning", "Risk map", "Alert dispatch"])
+
+# ================= WARNING ================================================
 with T1:
     st.markdown(f"""<div class='kpis'>
     <div class='kpi' style='--c:#FF2D3F'><div class='v'>{cnt['RED']}</div><div class='k'>Red · take action</div></div>
@@ -348,100 +352,106 @@ with T1:
     <div class='kpi' style='--c:#22D9E8'><div class='v'>{pop_exp}L</div><div class='k'>Population exposed</div></div>
     </div>""", unsafe_allow_html=True)
 
-    m, s = st.columns([1.25, 1], gap="medium")
+    st.markdown(f"<div class='alert' style='--c:{top['C']};padding:22px 26px'>"
+                f"<div class='tag'>{top['Band']} · {MEANING[top['Band']].upper()} · HIGHEST RISK</div>"
+                f"<div class='ttl' style='font-size:2.1rem'>{top['District']} · {top['Risk']}/100</div>"
+                f"<div class='act'>{top['Action']}</div>"
+                f"<div class='meta'>{top['mm']}MM RAIN · {top['emb'].upper()} EMBANKMENT · "
+                f"CHAR {top['char']}% · {top['pop']} LAKH PEOPLE · "
+                f"{round(top['pop']*top['char']/100,1)} LAKH ON CHAR LAND</div></div>",
+                unsafe_allow_html=True)
+    st.write("")
+
+    warn = R[R.Risk >= 25].to_dict("records")
+    if warn:
+        st.markdown("<div class='sec'>Districts under warning · preparedness action</div>",
+                    unsafe_allow_html=True)
+        cols = st.columns(min(3, len(warn)))
+        for i, r in enumerate(warn[:6]):
+            with cols[i % len(cols)]:
+                st.markdown(f"<div class='alert' style='--c:{r['C']};margin-bottom:12px'>"
+                            f"<div class='tag'>{r['Band']} · {r['Risk']}/100</div>"
+                            f"<div class='ttl' style='font-size:1.25rem'>{r['District']}</div>"
+                            f"<div class='act' style='font-size:13.5px'>{r['Action']}</div>"
+                            f"<div class='meta'>{r['mm']}MM · {round(r['pop']*r['char']/100,1)} LAKH "
+                            f"ON CHAR LAND</div></div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='alert' style='--c:#00E08A;padding:22px 26px'>"
+                    "<div class='tag'>ALL CLEAR</div>"
+                    "<div class='ttl' style='font-size:1.7rem'>No district above the warning threshold</div>"
+                    "<div class='act'>Routine monitoring. The system re-reads the forecast every hour "
+                    "and raises a warning on its own.</div></div>", unsafe_allow_html=True)
+
+    st.write("")
+    st.markdown("<div class='pnl'><div class='h'>Escalation chain · once a district turns Orange</div>"
+                "<div class='b'>"
+                "T−24h  District Commissioner + Circle Officer notified\n"
+                "T−18h  Village volunteers and ASHA workers alerted\n"
+                "T−12h  Household SMS + IVR wave 1\n"
+                "T−6h   Relief camps opened, country boats positioned\n"
+                "T−3h   Loudspeaker announcement in char villages</div>"
+                "<div class='n'>Riverine flooding gives this much lead time. Landslides do not — which "
+                "is why this system targets flooding.</div></div>", unsafe_allow_html=True)
+
+# ================= RISK MAP ===============================================
+with T2:
+    m, s = st.columns([1, 1.3], gap="medium")
     with m:
         pts = R[["lat","lon"]].copy()
         pts["color"] = R.C
         pts["size"] = (R.Risk * 320 + 6000).astype(int)
         st.map(pts, color="color", size="size", zoom=6.3)
         st.caption(f"Source: {src}")
-    with s:
-        st.markdown(f"<div class='alert' style='--c:{top['C']}'>"
-                    f"<div class='tag'>HIGHEST RISK · {top['Band']} · {MEANING[top['Band']].upper()}</div>"
-                    f"<div class='ttl'>{top['District']} · {top['Risk']}/100</div>"
-                    f"<div class='act'>{top['Action']}</div>"
-                    f"<div class='meta'>{top['mm']}MM RAIN · {top['emb'].upper()} EMBANKMENT · "
-                    f"CHAR {top['char']}% · {top['pop']} LAKH PEOPLE</div></div>", unsafe_allow_html=True)
-        st.write("")
-        st.markdown("<div class='pnl'><div class='h'>Escalation chain</div><div class='b'>"
-                    "T−24h  District Commissioner + Circle Officer\n"
-                    "T−18h  Village volunteers, ASHA workers\n"
-                    "T−12h  Household SMS + IVR wave 1\n"
-                    "T−6h   Relief camps open, boats positioned\n"
-                    "T−3h   Loudspeaker in char villages</div>"
-                    "<div class='n'>Riverine flooding gives this lead time. Landslides do not — which "
-                    "is why this system targets flooding.</div></div>", unsafe_allow_html=True)
 
-    # ---- event replay: would the model have fired? ----
-    if mode == "Replay past event":
-        st.write("")
-        st.markdown("<div class='sec'>Event replay · would the model have warned?</div>",
-                    unsafe_allow_html=True)
-        d0 = dd - timedelta(days=12)
-        d1 = min(dd + timedelta(days=12), date.today() - timedelta(days=6))
-        days, cols = archive_range(LATS, LONS, d0, d1)
-        if days is None:
-            st.info("Archive range unavailable — the single-day replay above still works.")
-        else:
-            series, peak = [], []
-            for k, day in enumerate(days):
-                red = org = 0
-                mx = 0
-                for i, dd_row in DISTRICTS.iterrows():
-                    mmv = cols[i][k]
-                    mx = max(mx, mmv)
-                    sc, *_ = assess(dd_row, mmv)
-                    if sc >= 75: red += 1
-                    elif sc >= 50: org += 1
-                series.append({"date": day, "Red districts": red, "Orange districts": org})
-                peak.append(mx)
-            ch = pd.DataFrame(series).set_index("date")
-            fired = [s for s in series if s["Red districts"] > 0]
-            g1, g2 = st.columns([1.7, 1])
-            with g1:
-                st.bar_chart(ch, color=["#FF8A1E", "#FF2D3F"], height=230)
-            with g2:
+        if mode == "Replay past event":
+            d0 = dd - timedelta(days=12)
+            d1 = min(dd + timedelta(days=12), date.today() - timedelta(days=6))
+            days, cols_ = archive_range(LATS, LONS, d0, d1)
+            if days:
+                series, peak = [], []
+                for k, day in enumerate(days):
+                    red = org = 0; mx = 0
+                    for i, drow in DISTRICTS.iterrows():
+                        mmv = cols_[i][k]; mx = max(mx, mmv)
+                        sc, *_ = assess(drow, mmv)
+                        if sc >= 75: red += 1
+                        elif sc >= 50: org += 1
+                    series.append({"date": day, "Orange": org, "Red": red}); peak.append(mx)
+                fired = [x for x in series if x["Red"] > 0]
+                st.markdown("<div class='sec'>Event replay · would the model have warned?</div>",
+                            unsafe_allow_html=True)
+                st.bar_chart(pd.DataFrame(series).set_index("date"),
+                             color=["#FF8A1E", "#FF2D3F"], height=200)
                 if fired:
-                    first = fired[0]["date"]
-                    worst = max(series, key=lambda s: (s["Red districts"], s["Orange districts"]))
-                    st.markdown(
-                        f"<div class='alert' style='--c:#FF2D3F'>"
-                        f"<div class='tag'>MODEL WOULD HAVE FIRED</div>"
-                        f"<div class='ttl'>First RED · {first}</div>"
-                        f"<div class='act'>Peak {worst['Red districts']} districts on Red and "
-                        f"{worst['Orange districts']} on Orange, on {worst['date']}. "
-                        f"Peak recorded rainfall in the window: {max(peak):.0f} mm/24h.</div>"
-                        f"<div class='meta'>ERA5 RECORDED RAINFALL · {d0} → {d1}</div></div>",
-                        unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        "<div class='pnl'><div class='h'>No Red in this window</div><div class='b'>"
-                        "Recorded rainfall stayed below the Red threshold for every district.\n\n"
-                        "Try a monsoon date — June to August.</div></div>", unsafe_allow_html=True)
-                st.caption("Warning raised on recorded rainfall alone — no hindsight, no tuning "
-                           "to this event. The model does not claim the flood was preventable, only "
-                           "that a warning was available in advance.")
-
-# ================= RISK SCORES ============================================
-with T2:
-    st.markdown("<div class='sec'>Risk score per district · click OPEN for the breakdown</div>",
-                unsafe_allow_html=True)
-    for r in R.to_dict("records"):
-        rc, bc = st.columns([11, 1.5])
-        with rc:
-            bars = "".join(
-                f"<div class='br' style='--bc:{r['C']}'><span class='l'>{lab}</span>"
-                f"<span class='t'><i style='width:{val*100:.0f}%'></i></span>"
-                f"<span class='n'>{val:.2f}</span></div>"
-                for lab, val in (("H", r['H']), ("E", r['E']), ("V", r['V'])))
-            st.markdown(f"<div class='row{' hot' if r['Risk']>=50 else ''}' style='--c:{r['C']}'>"
-                        f"<div class='nm'>{r['District']}<span>{r['mm']}MM · {r['emb'].upper()} · "
-                        f"CHAR {r['char']}%</span></div>"
-                        f"<div class='sc'>{r['Risk']}<span>{r['Band']}</span></div>"
-                        f"<div class='bars'>{bars}</div></div>", unsafe_allow_html=True)
-        with bc:
-            if st.button("OPEN", key=f"o_{r['District']}", use_container_width=True):
-                district_window(r)
+                    worst = max(series, key=lambda x: (x["Red"], x["Orange"]))
+                    st.markdown(f"<div class='alert' style='--c:#FF2D3F'>"
+                                f"<div class='tag'>MODEL WOULD HAVE FIRED</div>"
+                                f"<div class='ttl' style='font-size:1.3rem'>First RED · {fired[0]['date']}</div>"
+                                f"<div class='act' style='font-size:13.5px'>Peak {worst['Red']} districts "
+                                f"on Red and {worst['Orange']} on Orange, {worst['date']}. Peak recorded "
+                                f"rainfall {max(peak):.0f} mm/24h.</div></div>", unsafe_allow_html=True)
+                    st.caption("Run on recorded rainfall alone — no tuning to this event. The model "
+                               "does not claim the flood was preventable, only that a warning was "
+                               "available in advance.")
+    with s:
+        st.markdown("<div class='sec'>Risk score per district · click OPEN for the breakdown</div>",
+                    unsafe_allow_html=True)
+        for r in R.to_dict("records"):
+            rc, bc = st.columns([11, 1.6])
+            with rc:
+                bars = "".join(
+                    f"<div class='br' style='--bc:{r['C']}'><span class='l'>{lab}</span>"
+                    f"<span class='t'><i style='width:{val*100:.0f}%'></i></span>"
+                    f"<span class='n'>{val:.2f}</span></div>"
+                    for lab, val in (("H", r['H']), ("E", r['E']), ("V", r['V'])))
+                st.markdown(f"<div class='row{' hot' if r['Risk']>=50 else ''}' style='--c:{r['C']}'>"
+                            f"<div class='nm'>{r['District']}<span>{r['mm']}MM · {r['emb'].upper()} · "
+                            f"CHAR {r['char']}%</span></div>"
+                            f"<div class='sc'>{r['Risk']}<span>{r['Band']}</span></div>"
+                            f"<div class='bars'>{bars}</div></div>", unsafe_allow_html=True)
+            with bc:
+                if st.button("OPEN", key=f"o_{r['District']}", use_container_width=True):
+                    district_window(r)
 
 # ================= ALERT DISPATCH =========================================
 with T3:
@@ -457,90 +467,23 @@ with T3:
                 f"{round(r['pop']*r['dep']/100,1)} LAKH CHILDREN AND ELDERLY</div></div>",
                 unsafe_allow_html=True)
     st.write("")
-    s, v = sms_for(r), ivr_for(r)
+    s_, v_ = sms_for(r), ivr_for(r)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"<div class='pnl'><div class='h'>01 · Officer dashboard</div><div class='b'>"
                     f"{r['District']}\nRISK {r['Risk']}/100 · {r['Band']}\n"
                     f"H {r['H']} × E {r['E']} × V {r['V']}</div>"
-                    f"<div class='n'>DC office, circle officers. Needs a laptop and a connection.</div></div>",
-                    unsafe_allow_html=True)
+                    f"<div class='n'>DC office, circle officers.</div></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"<div class='pnl'><div class='h'>02 · SMS · {len(s)} chars</div><div class='b'>{s}</div>"
+        st.markdown(f"<div class='pnl'><div class='h'>02 · SMS · {len(s_)} chars</div><div class='b'>{s_}</div>"
                     f"<div class='n'>Any feature phone, no data. Cell broadcast reaches unregistered "
-                    f"numbers. Assamese · Bengali · Bodo · Hindi from one template.</div></div>",
-                    unsafe_allow_html=True)
+                    f"numbers. Assamese · Bengali · Bodo · Hindi.</div></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div class='pnl'><div class='h'>03 · IVR voice call</div><div class='b'>{v}</div>"
-                    f"<div class='n'>No literacy requirement, no smartphone. Auto-dialled to the "
-                    f"panchayat roll, repeats until answered.</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='pnl'><div class='h'>03 · IVR voice call</div><div class='b'>{v_}</div>"
+                    f"<div class='n'>No literacy requirement. Auto-dialled to the panchayat roll.</div></div>",
+                    unsafe_allow_html=True)
     with c4:
         st.markdown("<div class='pnl'><div class='h'>04 · Off-grid</div><div class='b'>"
                     "· ASHA worker — printed slip\n· Panchayat loudspeaker\n· Red flag at the ghat</div>"
                     "<div class='n'>Char villages lose tower coverage as the river rises. The system "
                     "degrades to paper and cloth by design.</div></div>", unsafe_allow_html=True)
-
-# ================= DATA & METHOD ==========================================
-with T4:
-    st.markdown("<div class='sec'>Data provenance</div>", unsafe_allow_html=True)
-    d1, d2 = st.columns(2)
-    with d1:
-        st.markdown("<div class='pnl'><div class='h'>Rainfall — real, live</div><div class='b'>"
-                    "Source     ECMWF forecast + ERA5 reanalysis\n"
-                    "Served by  Open-Meteo (free, no key)\n"
-                    "Endpoint   api.open-meteo.com/v1/forecast\n"
-                    "           archive-api.open-meteo.com/v1/archive\n"
-                    "Variable   precipitation_sum, daily, mm\n"
-                    "Coverage   1940 → today + 3 day forecast\n"
-                    "Fetched    per district lat/lon, one call</div>"
-                    "<div class='n'>ERA5 assimilates satellite observations. This is the open "
-                    "satellite-derived dataset the system runs on.</div></div>", unsafe_allow_html=True)
-    with d2:
-        st.markdown("<div class='pnl'><div class='h'>District profiles — illustrative</div><div class='b'>"
-                    "Population, char habitation %, kutcha\n"
-                    "housing %, dependent population %,\n"
-                    "embankment condition.\n\n"
-                    "These are PLACEHOLDER values for this\n"
-                    "prototype. They are not sourced.\n\n"
-                    "Production source would be:\n"
-                    "  · ASDMA flood damage reports\n"
-                    "  · Census of India, district tables\n"
-                    "  · Water Resources Dept embankment register</div>"
-                    "<div class='n'>Loading real profiles is a data-ingestion task, not a modelling "
-                    "one — the scoring layer does not change.</div></div>", unsafe_allow_html=True)
-
-    st.write("")
-    st.markdown("<div class='sec'>Scoring method</div>", unsafe_allow_html=True)
-    e1, e2 = st.columns([1, 1])
-    with e1:
-        st.markdown("<div class='pnl'><div class='h'>Risk = Hazard × Exposure × Vulnerability</div>"
-                    "<div class='b'>"
-                    "HAZARD        rainfall vs embankment capacity\n"
-                    "              Weak 35mm · Moderate 62mm · Strong 88mm\n"
-                    "              threshold reduced 0.30 × char%\n\n"
-                    "EXPOSURE      district population / 28 lakh\n\n"
-                    "VULNERABILITY 0.45 char% + 0.35 kutcha% + 0.20 dependents%\n\n"
-                    "RISK          100 × H × (0.30 + 0.70 × (0.45E + 0.55V))</div>"
-                    "<div class='n'>Hazard multiplies, so no rainfall means no risk however vulnerable "
-                    "the district. Vulnerability ranks districts already under threat — it never "
-                    "invents one. Deterministic and inspectable: an officer can audit the reason "
-                    "before acting.</div></div>", unsafe_allow_html=True)
-    with e2:
-        st.markdown("<div class='pnl'><div class='h'>Warning bands — IMD convention</div><div class='b'>"
-                    "RED     75 – 100   Take action\n"
-                    "ORANGE  50 – 74    Be prepared\n"
-                    "YELLOW  25 – 49    Be updated\n"
-                    "GREEN    0 – 24    No warning</div>"
-                    "<div class='n'>The India Meteorological Department colour code, so output plugs "
-                    "into the warning language officials already use.</div></div>", unsafe_allow_html=True)
-        st.write("")
-        st.markdown("<div class='pnl'><div class='h'>Not machine learning — deliberately</div>"
-                    "<div class='b'>No classifier is trained.\n\n"
-                    "Flood events are rare and heavily\n"
-                    "imbalanced; a learned model on this\n"
-                    "data is dominated by the negative class.\n\n"
-                    "Thresholds are calibrated and verified\n"
-                    "against recorded events — which is how\n"
-                    "operational warning systems are built.</div>"
-                    "<div class='n'>Fitting the weights from historical outcomes is the roadmap, once "
-                    "enough labelled events exist.</div></div>", unsafe_allow_html=True)
