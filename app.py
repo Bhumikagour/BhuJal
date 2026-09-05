@@ -237,10 +237,10 @@ def district_window(r):
 
 # ================= LOGIN ==================================================
 USERS = {
-    "officer": {"pw": "assam2026", "role": "District officer",
-                "name": "O. Baruah", "desig": "District Commissioner · ASDMA"},
-    "resident": {"pw": "char2026", "role": "Resident",
-                 "name": "Resident", "desig": "Household account"},
+    "ASDMA-01": {"role": "District officer",
+                 "name": "O. Baruah", "desig": "District Commissioner · ASDMA"},
+    "CHAR-77":  {"role": "Resident",
+                 "name": "Resident", "desig": "Household account · Dhubri"},
 }
 
 if "auth" not in st.session_state:
@@ -255,27 +255,27 @@ if st.session_state.auth is None:
     with L:
         st.markdown("<h1>Sign in</h1><p class='sub'>Two doors into the same warning. "
                     "The officer decides. The resident is told.</p>", unsafe_allow_html=True)
-        who = st.radio("Account type", ["District officer", "Resident"], horizontal=True)
-        u = st.text_input("User ID")
-        pw = st.text_input("Password", type="password")
+        u = st.text_input("User ID", placeholder="ASDMA-01")
         if st.button("SIGN IN", type="primary", use_container_width=True):
-            rec = USERS.get(u.strip().lower())
-            if rec and rec["pw"] == pw and rec["role"] == who:
-                st.session_state.auth = dict(rec, uid=u.strip().lower())
+            rec = None
+            for k, v in USERS.items():
+                if k.lower() == u.strip().lower():
+                    rec = v
+            if rec:
+                st.session_state.auth = dict(rec, uid=u.strip().upper())
                 st.rerun()
             else:
-                st.error("ACCESS DENIED · check the account type, ID and password.")
+                st.error("UNKNOWN USER ID · use ASDMA-01 or CHAR-77.")
+        st.caption("No password on the prototype. Deployment sits behind the state SSO.")
     with Rr:
         st.markdown(
-            "<div class='pnl'><div class='h'>District officer</div><div class='b'>"
-            "officer / assam2026</div>"
+            "<div class='pnl'><div class='h'>District officer</div><div class='b'>ASDMA-01</div>"
             "<div class='n'>Full board: every district, risk breakdown, map, dispatch log. "
             "Sees the whole state and authorises nothing by hand — the broadcast is automatic."
             "</div></div>", unsafe_allow_html=True)
         st.write("")
         st.markdown(
-            "<div class='pnl'><div class='h'>Resident</div><div class='b'>"
-            "resident / char2026</div>"
+            "<div class='pnl'><div class='h'>Resident</div><div class='b'>CHAR-77</div>"
             "<div class='n'>One screen. Your district, your risk, what to do tonight. "
             "If your district is in warning the alert is on screen before you touch anything."
             "</div></div>", unsafe_allow_html=True)
