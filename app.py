@@ -326,28 +326,62 @@ if view == "Resident":
     my = st.selectbox("Your district", list(R.District.sort_values()), key="mydist")
     r = R[R.District == my].iloc[0].to_dict()
 
-    # the app tells you - it does not wait to be asked. fires on open, and again
-    # whenever your district's warning level changes.
-    flag = f"alerted::{my}::{r['Band']}"
-    if r["Band"] in ("RED", "ORANGE") and not st.session_state.get(flag):
-        st.session_state[flag] = True
-        citizen_alert(r)
-
+    # The app tells you. It fires the moment your district escalates, and resets
+    # once you are back to safe, so the next escalation alerts you again.
+    key = f"alerted::{my}"
     if r["Band"] in ("RED", "ORANGE"):
-        st.markdown(
-            f"<div class='alert' style='--c:{r['C']};padding:24px 26px'>"
-            f"<div class='tag'>{r['Band']} · {MEANING[r['Band']].upper()}</div>"
-            f"<div class='ttl' style='font-size:2.1rem'>{r['District']} · {r['mm']} mm expected</div>"
-            f"<div class='act'>{r['Action']}</div></div>", unsafe_allow_html=True)
+        if st.session_state.get(key) != r["Band"]:
+            st.session_state[key] = r["Band"]
+            citizen_alert(r)
     else:
-        st.markdown(
-            f"<div class='alert' style='--c:#00E08A;padding:24px 26px'>"
-            f"<div class='tag'>NO WARNING · {r['District'].upper()}</div>"
-            f"<div class='ttl' style='font-size:2rem'>Normal day</div>"
-            f"<div class='act'>{r['mm']} mm of rain expected. Nothing to do - you will be told "
-            f"if that changes.</div>"
-            f"<div class='meta'>THE APP CHECKS THE FORECAST EVERY HOUR. YOU DO NOT NEED TO OPEN IT.</div>"
-            f"</div>", unsafe_allow_html=True)
+        st.session_state.pop(key, None)
+
+    plain = {"RED":   "LEAVE NOW. Water is coming.",
+             "ORANGE":"GET READY. Water may reach you.",
+             "YELLOW":"STAY ALERT. Watch the river.",
+             "GREEN": "Normal day."}[r["Band"]]
+    steps = {
+        "RED":   ["Go to the ward relief camp before dark",
+                  "Take your livestock to the embankment",
+                  "Put documents and phone in a plastic bag",
+                  "Tell your neighbours — do not wait to be told again"],
+        "ORANGE":["Pack a bag: documents, medicine, dry food",
+                  "Move valuables to the upper floor or a raised platform",
+                  "Charge your phone now",
+                  "Find out where your nearest relief camp is"],
+        "YELLOW":["Keep listening for the next announcement",
+                  "Check that your boat and rope are ready",
+                  "Keep documents together in one place"],
+        "GREEN": ["Nothing to do today"]}[r["Band"]]
+
+    st.markdown(
+        f"<div class='alert' style='--c:{r['C']};padding:34px 36px'>"
+        f"<div class='tag' style='font-size:12px'>{r['Band']} ALERT · {r['District'].upper()} DISTRICT</div>"
+        f"<div style='font-size:3.4rem;font-weight:800;color:{r['C']};letter-spacing:-.035em;"
+        f"margin:12px 0 10px;line-height:1.02'>{plain}</div>"
+        f"<div class='act' style='font-size:17px'>{r['mm']} mm of rain expected in the next 24 hours.</div>"
+        f"</div>", unsafe_allow_html=True)
+    st.write("")
+
+    a, b = st.columns([1.3, 1])
+    with a:
+        st.markdown("<div class='pnl'><div class='h'>What to do</div><div class='b'>"
+                    + "\n".join(f"{i+1}.  {s_}" for i, s_ in enumerate(steps))
+                    + "</div><div class='n'>Written to be read aloud. No jargon, no numbers you "
+                      "cannot act on.</div></div>", unsafe_allow_html=True)
+    with b:
+        if r["Band"] in ("RED", "ORANGE"):
+            st.markdown(f"<div class='pnl'><div class='h'>The SMS you receive</div>"
+                        f"<div class='b'>{sms_for(r)}</div>"
+                        f"<div class='n'>Sent to every number on the {r['District']} cell tower, "
+                        f"registered or not.</div></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='pnl'><div class='h'>You will be told</div><div class='b'>"
+                        "The app reads the forecast every hour.\n\n"
+                        "You do not need to open it.\n"
+                        "If your district escalates, you get an\n"
+                        "SMS, a voice call, and this screen.</div>"
+                        "<div class='n'>Silence means safe.</div></div>", unsafe_allow_html=True)
     st.stop()
 
 # ---------------- OFFICER VIEW · THREE TABS -------------------------------
