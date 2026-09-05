@@ -532,3 +532,35 @@ with T3:
                     "· ASHA worker — printed slip\n· Panchayat loudspeaker\n· Red flag at the ghat</div>"
                     "<div class='n'>Char villages lose tower coverage as the river rises. The system "
                     "degrades to paper and cloth by design.</div></div>", unsafe_allow_html=True)
+
+    # ---------- LIVE TRANSMIT ---------------------------------------------
+    st.write("")
+    st.markdown("<div class='sec'>Live transmit · real SMS gateway</div>", unsafe_allow_html=True)
+    tc1, tc2 = st.columns([2, 3])
+    with tc1:
+        num = st.text_input("Recipient number (with country code)", placeholder="+919xxxxxxxxx")
+        go = st.button("TRANSMIT SMS NOW", type="primary", use_container_width=True)
+    with tc2:
+        st.markdown(f"<div class='pnl'><div class='h'>Payload · {len(s_)} chars</div>"
+                    f"<div class='b'>{s_}</div>"
+                    f"<div class='n'>POST to the SMS gateway. In deployment this is a cell-broadcast "
+                    f"provider fanning out to every handset registered to a {pick} tower — the payload "
+                    f"is identical.</div></div>", unsafe_allow_html=True)
+
+    if go:
+        if not num.strip():
+            st.warning("Enter a number first.")
+        else:
+            key = st.secrets.get("TEXTBELT_KEY", "textbelt") if hasattr(st, "secrets") else "textbelt"
+            try:
+                resp = requests.post("https://textbelt.com/text", timeout=15, data={
+                    "phone": num.strip(), "message": s_, "key": key}).json()
+            except Exception as e:
+                resp = {"success": False, "error": f"network unreachable — {e}"}
+            if resp.get("success"):
+                st.success(f"TRANSMITTED · {pick} · {r['Band']} · {len(s_)} chars · "
+                           f"gateway id {resp.get('textId','—')}")
+            else:
+                st.error(f"GATEWAY REFUSED · {resp.get('error','unknown')}")
+                st.caption("Free tier is one message per day per IP. The payload above is what "
+                           "would have gone out — dispatch logic ran, the gateway quota did not.")
