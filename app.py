@@ -220,22 +220,26 @@ st.markdown("<div class='cmd'><span><span class='dot'></span><b>BhuJal</b> &nbsp
 h1, h2, h3 = st.columns([1.5, 1.15, 1.35])
 with h1:
     st.markdown("<h1>Flood risk · live</h1>"
-                "<p class='sub'>Risk = Hazard × Exposure × Vulnerability · 14 districts</p>",
+                "<p class='sub'>Reads the ECMWF forecast automatically — no operator input. "
+                "Risk = Hazard × Exposure × Vulnerability · 14 districts</p>",
                 unsafe_allow_html=True)
 with h2:
-    mode = st.radio("Rainfall source", ["Scenario", "Live forecast", "Verify past event"],
+    mode = st.radio("Mode", ["Live", "Replay past event", "Simulate"],
                     horizontal=True, label_visibility="collapsed")
 rains, src = None, ""
 with h3:
-    if mode == "Live forecast":
-        rains = fetch_rain(LATS, LONS); src = "Open-Meteo forecast · peak of next 3 days"
-    elif mode == "Verify past event":
+    if mode == "Live":
+        rains = fetch_rain(LATS, LONS)
+        src = "LIVE · ECMWF forecast via Open-Meteo · peak of next 3 days"
+    elif mode == "Replay past event":
         dd = st.date_input("Replay date", value=date(2022, 6, 18), label_visibility="collapsed",
                            min_value=date(1990,1,1), max_value=date.today()-timedelta(days=6))
-        rains = fetch_rain(LATS, LONS, dd); src = f"ERA5 reanalysis · recorded {dd}"
+        rains = fetch_rain(LATS, LONS, dd)
+        src = f"REPLAY · ERA5 reanalysis · recorded {dd}"
     if rains is None:
-        mmv = st.slider("Rainfall next 24h (mm)", 0, 200, 95, 5)
-        rains = [mmv]*len(DISTRICTS); src = (src + " — unreachable, scenario") if src else "Scenario · uniform rainfall"
+        mmv = st.slider("Simulated rainfall, next 24h (mm)", 0, 200, 95, 5)
+        rains = [mmv]*len(DISTRICTS)
+        src = (src + " — feed unreachable, simulating") if src else "SIMULATION · planning mode, not live data"
 
 # ---------------- SCORE ----------------------------------------------------
 rows = []
