@@ -116,12 +116,21 @@ def band_for(s):
         if s >= cut:
             return name, col
 
-def assess(d, mm):
-    cap = EMB_MM[d["emb"]] * (1 - 0.30 * d["char"] / 100)
-    H = min(max((mm - cap) / 95.0, 0.0), 1.0)
+def _EV(d):
     E = min(d["pop"] / 28.0, 1.0)
     V = min((0.45*d["char"] + 0.35*d["kutcha"] + 0.20*d["dep"]) / 100.0, 1.0)
-    return round(min(100 * H * (0.30 + 0.70*(0.45*E + 0.55*V)), 100)), round(H,2), round(E,2), round(V,2), round(cap)
+    return E, V, 0.45*E + 0.55*V
+
+# most exposed+vulnerable district in the set — used to normalise, so the worst
+# district reaches 100 at full hazard and the rest scale beneath it
+MAXCOMP = max(_EV(d)[2] for _, d in DISTRICTS.iterrows())
+
+def assess(d, mm):
+    cap = EMB_MM[d["emb"]] * (1 - 0.30 * d["char"] / 100)
+    H = min(max((mm - cap) / 55.0, 0.0), 1.0)      # ~55mm above threshold saturates hazard
+    E, V, comp = _EV(d)
+    score = 100 * H * (0.35 + 0.65 * (comp / MAXCOMP))
+    return round(min(score, 100)), round(H,2), round(E,2), round(V,2), round(cap)
 
 def action_for(b, char):
     if b == "RED":    return (f"Evacuate char and riverine settlements — {char}% of habitation — to raised "
@@ -231,11 +240,13 @@ st.markdown("<div class='cmd'><span><span class='dot'></span><b>BhuJal</b> &nbsp
             "<span>ECMWF / ERA5 rainfall — live &nbsp;·&nbsp; district profiles illustrative</span></div>",
             unsafe_allow_html=True)
 
-h1, h2, h3 = st.columns([1.5, 1.15, 1.35])
+h0, h1, h2, h3 = st.columns([1.05, 1.3, 1.05, 1.25])
+with h0:
+    view = st.radio("View as", ["District officer", "Resident"], label_visibility="collapsed")
 with h1:
     st.markdown("<h1>Flood risk · live</h1>"
-                "<p class='sub'>Reads the ECMWF forecast automatically — no operator input. "
-                "Risk = Hazard × Exposure × Vulnerability</p>", unsafe_allow_html=True)
+                "<p class='sub'>Reads the ECMWF forecast automatically — no operator input.</p>",
+                unsafe_allow_html=True)
 with h2:
     mode = st.radio("Mode", ["Live", "Replay past event", "Simulate"],
                     horizontal=True, label_visibility="collapsed")
@@ -269,7 +280,63 @@ top = R.iloc[0].to_dict()
 cnt = {b: int((R.Band == b).sum()) for b in ["RED","ORANGE","YELLOW","GREEN"]}
 pop_exp = round(float(R[R.Risk >= 50]["pop"].sum()), 1)
 
+# ---------------- RESIDENT VIEW -------------------------------------------
+@st.dialog("Flood warning", width="large")
+def citizen_alert(r):
+    plain = {"RED":   "LEAVE NOW. Water is coming.",
+             "ORANGE":"GET READY. Water may reach you.",
+             "YELLOW":"STAY ALERT. Watch the river.",
+             "GREEN": "NO WARNING. Normal day."}[r["Band"]]
+    steps = {
+        "RED":   ["Go to the ward relief camp before dark",
+                  "Take your livestock to the embankment",
+                  "Put documents and phone in a plastic bag",
+                  "Tell your neighbours — do not wait to be told again"],
+        "ORANGE":["Pack a bag: documents, medicine, dry food",
+                  "Move valuables to the upper floor or a raised platform",
+                  "Charge your phone now",
+                  "Find out where your nearest relief camp is"],
+        "YELLOW":["Keep listening for the next announcement",
+                  "Check that your boat and rope are ready",
+                  "Keep documents together in one place"],
+        "GREEN": ["No action needed today"]}[r["Band"]]
+    st.markdown(
+        f"<div class='alert' style='--c:{r['C']};padding:26px 28px'>"
+        f"<div class='tag' style='font-size:12px'>{r['Band']} ALERT · {r['District'].upper()} DISTRICT</div>"
+        f"<div style='font-size:2.7rem;font-weight:800;color:{r['C']};letter-spacing:-.03em;"
+        f"margin:10px 0 6px;line-height:1.05'>{plain}</div>"
+        f"<div class='act' style='font-size:16px'>{r['mm']} mm of rain expected in the next 24 hours.</div>"
+        f"</div>", unsafe_allow_html=True)
+    st.write("")
+    a, b = st.columns([1.25, 1])
+    with a:
+        st.markdown("<div class='pnl'><div class='h'>What to do</div><div class='b'>"
+                    + "\n".join(f"{i+1}.  {s}" for i, s in enumerate(steps))
+                    + "</div><div class='n'>Written for reading aloud. No jargon, no numbers you "
+                      "cannot act on.</div></div>", unsafe_allow_html=True)
+    with b:
+        st.markdown(f"<div class='pnl'><div class='h'>The SMS you receive</div>"
+                    f"<div class='b'>{sms_for(r)}</div>"
+                    f"<div class='n'>Sent to every number on the {r['District']} cell tower, "
+                    f"registered or not.</div></div>", unsafe_allow_html=True)
+
 T1, T2, T3, T4 = st.tabs(["Overview", "Risk scores", "Alert dispatch", "Data & method"])
+
+if view == "Resident":
+    my = st.selectbox("Your district", list(R.District.sort_values()), key="mydist")
+    r = R[R.District == my].iloc[0].to_dict()
+    flag = f"seen::{my}::{r['Band']}::{r['mm']}"
+    if r["Band"] in ("RED", "ORANGE") and not st.session_state.get(flag):
+        st.session_state[flag] = True
+        citizen_alert(r)
+    st.markdown(
+        f"<div class='alert' style='--c:{r['C']};padding:22px 24px'>"
+        f"<div class='tag'>{r['Band']} · {MEANING[r['Band']].upper()}</div>"
+        f"<div class='ttl' style='font-size:2rem'>{r['District']} · {r['mm']} mm expected</div>"
+        f"<div class='act'>{r['Action']}</div></div>", unsafe_allow_html=True)
+    if st.button("Show my alert", use_container_width=False):
+        citizen_alert(r)
+    st.stop()
 
 # ================= OVERVIEW ===============================================
 with T1:
