@@ -234,15 +234,70 @@ def district_window(r):
                     "<div class='n'>Char villages lose tower coverage as the river rises.</div></div>",
                     unsafe_allow_html=True)
 
+
+# ================= LOGIN ==================================================
+USERS = {
+    "officer": {"pw": "assam2026", "role": "District officer",
+                "name": "O. Baruah", "desig": "District Commissioner · ASDMA"},
+    "resident": {"pw": "char2026", "role": "Resident",
+                 "name": "Resident", "desig": "Household account"},
+}
+
+if "auth" not in st.session_state:
+    st.session_state.auth = None
+
+if st.session_state.auth is None:
+    st.markdown("<div class='cmd'><span><span class='dot'></span><b>BhuJal</b> &nbsp;·&nbsp; "
+                "Assam district flood risk &amp; early warning</span>"
+                "<span>restricted access &nbsp;·&nbsp; ASDMA prototype</span></div>",
+                unsafe_allow_html=True)
+    L, Rr = st.columns([1.15, 1])
+    with L:
+        st.markdown("<h1>Sign in</h1><p class='sub'>Two doors into the same warning. "
+                    "The officer decides. The resident is told.</p>", unsafe_allow_html=True)
+        who = st.radio("Account type", ["District officer", "Resident"], horizontal=True)
+        u = st.text_input("User ID")
+        pw = st.text_input("Password", type="password")
+        if st.button("SIGN IN", type="primary", use_container_width=True):
+            rec = USERS.get(u.strip().lower())
+            if rec and rec["pw"] == pw and rec["role"] == who:
+                st.session_state.auth = dict(rec, uid=u.strip().lower())
+                st.rerun()
+            else:
+                st.error("ACCESS DENIED · check the account type, ID and password.")
+    with Rr:
+        st.markdown(
+            "<div class='pnl'><div class='h'>District officer</div><div class='b'>"
+            "officer / assam2026</div>"
+            "<div class='n'>Full board: every district, risk breakdown, map, dispatch log. "
+            "Sees the whole state and authorises nothing by hand — the broadcast is automatic."
+            "</div></div>", unsafe_allow_html=True)
+        st.write("")
+        st.markdown(
+            "<div class='pnl'><div class='h'>Resident</div><div class='b'>"
+            "resident / char2026</div>"
+            "<div class='n'>One screen. Your district, your risk, what to do tonight. "
+            "If your district is in warning the alert is on screen before you touch anything."
+            "</div></div>", unsafe_allow_html=True)
+    st.stop()
+
+AUTH = st.session_state.auth
+
 # ---------------- HEADER + MODE -------------------------------------------
 st.markdown("<div class='cmd'><span><span class='dot'></span><b>BhuJal</b> &nbsp;·&nbsp; "
             "Assam district flood risk &amp; early warning</span>"
             "<span>ECMWF / ERA5 rainfall — live &nbsp;·&nbsp; district profiles illustrative</span></div>",
             unsafe_allow_html=True)
 
+view = AUTH["role"]
 h0, h1, h2, h3 = st.columns([1.05, 1.3, 1.05, 1.25])
 with h0:
-    view = st.radio("View as", ["District officer", "Resident"], label_visibility="collapsed")
+    st.markdown(f"<div class='pnl' style='padding:10px 14px'><div class='h'>{AUTH['role']}</div>"
+                f"<div class='b'>{AUTH['name']}</div>"
+                f"<div class='n'>{AUTH['desig']}</div></div>", unsafe_allow_html=True)
+    if st.button("Sign out", use_container_width=True):
+        st.session_state.auth = None
+        st.rerun()
 with h1:
     st.markdown("<h1>Flood risk · live</h1>"
                 "<p class='sub'>Reads the ECMWF forecast automatically — no operator input.</p>",
